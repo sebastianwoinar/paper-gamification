@@ -8,12 +8,14 @@ import json
 import re
 import docx
 
+import detex
+
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 from watchdog.events import FileModifiedEvent
 
-
 class GamificationHandler(FileSystemEventHandler):
+
 
 	def __init__(self, paper_filename, publish_url, paper_id):
 
@@ -120,12 +122,44 @@ class GamificationHandler(FileSystemEventHandler):
 		f.close()
 		self.parse_paragraphs(text)
 
+	def parse_tex_file(self, filename):
+		# Read file
+		f = open(filename)
+
+		text = ""
+		for line in f.readlines():
+			clean_line = detex.detex(line)
+			
+			text += clean_line
+			word_split = re.findall(r"[\w']+", clean_line)
+			# Analyse
+			self.parse_text_statistics(word_split)
+
+		f.close()
+		self.parse_paragraphs(text)
+		self.exclude_words("./tex_commands.txt")
+
+	def exclude_words(self, filename):
+		words = []
+		num_words = 0
+		# Count	and compare
+		f = open(filename)
+		for word in f.readlines():
+			if word.strip() != "":
+				word_to_exclude = word.strip().lower()
+				if self.words.has_key(word_to_exclude):
+					del self.words[word_to_exclude]
+		f.close()
+
 	def parse_file(self, filename):
 		# Parse file 
 
 		if filename.endswith(".docx"):
 			logging.info("\tParsing the Word document " + filename)
 			self.parse_word_file(filename)
+		elif  filename.endswith(".tex"):
+			logging.info("\tParsing the tex file " + filename)
+			self.parse_tex_file(filename)
 		elif filename.endswith(".txt") or filename.endswith(".tex") or filename.endswith(".md"):
 			logging.info("\tParsing the file " + filename)
 			self.parse_text_file(filename)
