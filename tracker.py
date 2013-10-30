@@ -41,18 +41,19 @@ class GamificationHandler(FileSystemEventHandler):
 	def on_modified(self, event):
 		# MAIN CALLBACK - a file got modified
 		logging.info("Modify event occurred: " + event.src_path)
-		if type(event) == FileModifiedEvent:
-			logging.info("A file was modified: " + event.src_path)
+		paper_path = os.path.abspath(self.paper_filename)
 
-			paper_path = os.path.abspath(self.paper_filename)
-			logging.info("Checking if it was the paper: " + paper_path)
+		if paper_path in event.src_path:                    
+			logging.info("Paper change detected, calculating statistics ...")
+			if type(event) == FileModifiedEvent :
+				logging.info("A file was modified: " + event.src_path)
+			else:
+				logging.info("Following Event Tyoe" + type(event))
 
-			if paper_path == event.src_path:
-				logging.info("Paper change detected, calculating statistics ...")
-				self.calculate_statistics()
-				logging.info("Publishing ...")
-				self.publish()
-				logging.info("Published!")
+			self.calculate_statistics()
+			logging.info("Publishing ...")
+			self.publish()
+			logging.info("Published!")
 
 
 	def parse_paragraphs(self, text):
@@ -94,9 +95,9 @@ class GamificationHandler(FileSystemEventHandler):
 			self.num_words += 1
 
 
-	def parse_word_file(self):
+	def parse_word_file(self, filename):
 		# Read file
-		document = docx.opendocx(self.paper_filename)
+		document = docx.opendocx(filename)
 		text = " ".join(docx.getdocumenttext(document))
 		self.parse_paragraphs(text)
 		word_split = re.findall(r"[\w']+", text)
@@ -105,9 +106,9 @@ class GamificationHandler(FileSystemEventHandler):
 		self.parse_text_statistics(word_split)
 
 
-	def parse_text_file(self):
+	def parse_text_file(self, filename):
 		# Read file
-		f = open(self.paper_filename)
+		f = open(filename)
 
 		text = ""
 		for line in f.readlines():
@@ -119,7 +120,16 @@ class GamificationHandler(FileSystemEventHandler):
 		f.close()
 		self.parse_paragraphs(text)
 
+	def parse_file(self, filename):
+		# Parse file 
 
+		if filename.endswith(".docx"):
+			logging.info("\tParsing the Word document " + filename)
+			self.parse_word_file(filename)
+		elif filename.endswith(".txt") or filename.endswith(".tex") or filename.endswith(".md"):
+			logging.info("\tParsing the file " + filename)
+			self.parse_text_file(filename)
+            
 	def calculate_statistics(self):
 		# Reset values 
 		self.stats = {}
@@ -128,15 +138,29 @@ class GamificationHandler(FileSystemEventHandler):
 		self.num_words = 0
 		self.total_word_len = 0
 
-		# Parse file 
-		logging.info("\tParsing the paper ...")
-		if self.paper_filename.endswith(".docx"):
-			self.parse_word_file()
+		if os.path.isdir(self.paper_filename):
+			logging.info("\tParsing all files in directory ...")
+			path = self.paper_filename
+			if not path.endswith("/"):
+				path = path + "/"
+				
+			dirList = os.listdir(path)
+			for entry in dirList:
+				if os.path.isdir(path + entry) == True:
+					logging.info("\tFound subdirectory - but there has to be an end ;-)")                    
+				else:
+					self.parse_file( path + entry )
 		else:
-			self.parse_text_file()
+			self.parse_file(self.paper_filename)
 
 		# By now, text-statistics should be saved in instance variables
+		
+		self.build_stats()
 
+		logging.info("\tStats: " + str(self.stats))
+
+	def build_stats(self):
+		# Build stats together
 		# Determine interesting words
 		logging.info("\tCalculating interesting words ...")
 		interesting_words = self.get_interesting_words(40)
@@ -157,7 +181,6 @@ class GamificationHandler(FileSystemEventHandler):
 		logging.info("\tCalculating academic word list coverage ...")
 		awl_coverage = self.get_awl_coverage("./awl.txt")
 
-		# Build stats together
 		logging.info("\tBuilding stats together ...")
 		self.stats = {
 			"num_words" : self.num_words,
@@ -181,11 +204,6 @@ class GamificationHandler(FileSystemEventHandler):
 				"category_hits": awl_coverage["category_hits"]
 			}
 		}
-
-		# Sort
-		#stats = sorted(words.iteritems(), key=operator.itemgetter(1), reverse=True)		
-		logging.info("\tStats: " + str(self.stats))
-
 
 	def get_interesting_words(self, num):
 		sorted_words = sorted(self.words.iteritems(), key=operator.itemgetter(1), reverse=True)
@@ -221,6 +239,7 @@ class GamificationHandler(FileSystemEventHandler):
 		return interesting_words
 
 
+	
 	def get_coverage(self, filename):
 		""" Reads a list of words and compares it to the own words"""
 		words = []
