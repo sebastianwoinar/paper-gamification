@@ -50,7 +50,7 @@ class GamificationHandler(FileSystemEventHandler):
 			if type(event) == FileModifiedEvent :
 				logging.info("A file was modified: " + event.src_path)
 			else:
-				logging.info("Following Event Tyoe" + type(event))
+				logging.info("Following Event Type" + str(type(event)))
 
 			self.calculate_statistics()
 			logging.info("Publishing ...")
